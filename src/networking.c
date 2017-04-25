@@ -895,6 +895,7 @@ int writeToClient(int fd, client *c, int handler_installed) {
     while(clientHasPendingReplies(c)) {
         if (c->bufpos > 0) {
             nwritten = write(fd,c->buf+c->sentlen,c->bufpos-c->sentlen);
+            printf("written %d: %s\n", nwritten, c->buf);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;
@@ -915,6 +916,7 @@ int writeToClient(int fd, client *c, int handler_installed) {
             }
 
             nwritten = write(fd, o + c->sentlen, objlen - c->sentlen);
+            printf("written %d: %s\n", nwritten, o);
             if (nwritten <= 0) break;
             c->sentlen += nwritten;
             totwritten += nwritten;
@@ -1283,6 +1285,10 @@ int processMultibulkBuffer(client *c) {
  * or because a client was blocked and later reactivated, so there could be
  * pending query buffer, already representing a full command, to process. */
 void processInputBuffer(client *c) {
+    printf("querybuf = %s\n",c->querybuf);
+    for (int i=0; c->querybuf[i] != 0; i++) {
+      printf("%d: %c %d\n",i, c->querybuf[i],c->querybuf[i]);
+    }
     server.current_client = c;
     /* Keep processing while there is something in the input buffer */
     while(sdslen(c->querybuf)) {

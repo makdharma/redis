@@ -1788,7 +1788,7 @@ void initServer(void) {
             strerror(errno));
         exit(1);
     }
-    server.db = zmalloc(sizeof(redisDb)*server.dbnum);
+    server.db = (redisDb *)zmalloc(sizeof(redisDb)*server.dbnum);
 
     /* Open the TCP listening socket for the user commands. */
     if (server.port != 0 &&
@@ -1980,7 +1980,7 @@ int redisOpArrayAppend(redisOpArray *oa, struct redisCommand *cmd, int dbid,
 {
     redisOp *op;
 
-    oa->ops = zrealloc(oa->ops,sizeof(redisOp)*(oa->numops+1));
+    oa->ops = (redisOp *)zrealloc(oa->ops,sizeof(redisOp)*(oa->numops+1));
     op = oa->ops+oa->numops;
     op->cmd = cmd;
     op->dbid = dbid;
@@ -2008,14 +2008,14 @@ void redisOpArrayFree(redisOpArray *oa) {
 /* ====================== Commands lookup and execution ===================== */
 
 struct redisCommand *lookupCommand(sds name) {
-    return dictFetchValue(server.commands, name);
+    return (struct redisCommand *)dictFetchValue(server.commands, name);
 }
 
 struct redisCommand *lookupCommandByCString(char *s) {
     struct redisCommand *cmd;
     sds name = sdsnew(s);
 
-    cmd = dictFetchValue(server.commands, name);
+    cmd = (struct redisCommand *)dictFetchValue(server.commands, name);
     sdsfree(name);
     return cmd;
 }
@@ -2028,9 +2028,9 @@ struct redisCommand *lookupCommandByCString(char *s) {
  * rewriteClientCommandVector() in order to set client->cmd pointer
  * correctly even if the command was renamed. */
 struct redisCommand *lookupCommandOrOriginal(sds name) {
-    struct redisCommand *cmd = dictFetchValue(server.commands, name);
+    struct redisCommand *cmd = (struct redisCommand *)dictFetchValue(server.commands, name);
 
-    if (!cmd) cmd = dictFetchValue(server.orig_commands,name);
+    if (!cmd) cmd = (struct redisCommand *)dictFetchValue(server.orig_commands,name);
     return cmd;
 }
 
@@ -2074,7 +2074,7 @@ void alsoPropagate(struct redisCommand *cmd, int dbid, robj **argv, int argc,
 
     if (server.loading) return; /* No propagation during loading. */
 
-    argvcopy = zmalloc(sizeof(robj*)*argc);
+    argvcopy = (robj **)zmalloc(sizeof(robj*)*argc);
     for (j = 0; j < argc; j++) {
         argvcopy[j] = argv[j];
         incrRefCount(argv[j]);
@@ -2189,7 +2189,7 @@ void call(client *c, int flags) {
     /* Log the command into the Slow log if needed, and populate the
      * per-command statistics that we show in INFO commandstats. */
     if (flags & CMD_CALL_SLOWLOG && c->cmd->proc != execCommand) {
-        char *latency_event = (c->cmd->flags & CMD_FAST) ?
+        const char *latency_event = (const char *)(c->cmd->flags & CMD_FAST) ?
                               "fast-command" : "command";
         latencyAddSampleIfNeeded(latency_event,duration/1000);
         slowlogPushEntryIfNeeded(c->argv,c->argc,duration);
@@ -3616,13 +3616,8 @@ int redisIsSupervised(int mode) {
     return 0;
 }
 
-#ifdef GRPC_SERVER
-void *querybuf(client *c) { return c->querybuf; }
-char *outbuf(client *c, int *len) {*len = c->bufpos; return c->buf;}
-int grpc_main(int argc, char **argv) {
-#else
+
 int main(int argc, char **argv) {
-#endif
     struct timeval tv;
     int j;
 
@@ -3653,7 +3648,6 @@ int main(int argc, char **argv) {
 #endif
 
     /* We need to initialize our libraries, and the server configuration. */
-    printf("argc=%d\n", argc);
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
@@ -3810,13 +3804,9 @@ int main(int argc, char **argv) {
         serverLog(LL_WARNING,"WARNING: You specified a maxmemory value that is less than 1MB (current value is %llu bytes). Are you sure this is what you really want?", server.maxmemory);
     }
 
-#ifdef GRPC_SERVER
-    printf("Done Init");
-#else
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeMain(server.el);
     aeDeleteEventLoop(server.el);
-#endif
     return 0;
 }
 

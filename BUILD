@@ -147,7 +147,8 @@ cc_library (
     "-Ideps/lua/src",
     "-Ideps/hiredis",
     "-DREDIS_STATIC=",
-    "-std=c99 -pedantic",
+    "-std=c99",
+    "-pedantic",
   ],
 )
 
@@ -220,6 +221,7 @@ cc_library (
   hdrs = [
     "deps/lua/src/lua.h",
   ],
+  linkstatic = 1,
 )
 
 cc_library(
@@ -254,10 +256,36 @@ cc_binary(
     "src/redis.pb.cc",
     "src/redis.pb.h",
     "src/grpc-redis.cc",
+    "src/server.c",
+  ],
+  linkstatic = 1,
+  deps = [
+    ":redis-server-lib",
+    ":lua-lib",
+    "//external:grpc++",
+  ],
+  copts = [
+    "-Ideps/lua/src",
+    "-Wno-writable-strings",
+  ],
+  defines = [
+    "GRPC_SERVER",
+  ]
+)
+
+cc_binary(
+  name = "benchmark-grpc",
+  srcs = [
+    "src/redis.grpc.pb.cc",
+    "src/redis.grpc.pb.h",
+    "src/redis.pb.cc",
+    "src/redis.pb.h",
+    "src/benchmark-grpc.cc",
   ],
   deps = [
     ":redis-server-lib",
     ":lua-lib",
+    "//external:grpc++",
   ],
   copts = [
     "-Ideps/lua/src",
