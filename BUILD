@@ -249,7 +249,7 @@ cc_binary(
 )
 
 cc_binary(
-  name = "redis-grpc",
+  name = "grpc-server",
   srcs = [
     "src/redis.grpc.pb.cc",
     "src/redis.grpc.pb.h",
@@ -263,6 +263,7 @@ cc_binary(
     ":redis-server-lib",
     ":lua-lib",
     "//external:grpc++",
+    "//external:gflags",
   ],
   copts = [
     "-Ideps/lua/src",
@@ -274,7 +275,7 @@ cc_binary(
 )
 
 cc_binary(
-  name = "benchmark-grpc",
+  name = "grpc-benchmark",
   srcs = [
     "src/redis.grpc.pb.cc",
     "src/redis.grpc.pb.h",

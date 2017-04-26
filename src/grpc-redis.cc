@@ -1,5 +1,6 @@
 #include <grpc++/grpc++.h>
 #include <assert.h>
+#include "gflags/gflags.h"
 
 #include "redis.grpc.pb.h"
 #include "redis.pb.h"
@@ -21,9 +22,12 @@ void initServerConfig(void);
 void grpc_main(int argc, char **argv);
 void *createClient(int fd);
 void processInputBuffer(void *c);
-void *querybuf(void *c);
-char *outbuf(void *c, int *len);
+void *querybuf(void *c, uint32_t len);
+char *outbuf(void *c, uint32_t *len);
+void settag(void *c, void *tag, void *callback);
 }
+
+void addReplyGrpcCallback(void *tag, const char *s, size_t len);
 
 class ServerImpl final {
  public:
@@ -47,6 +51,10 @@ class ServerImpl final {
     HandleRpcs();
   }
 
+  void addReplyGrpc(void *tag, const char *s, size_t len) {
+    static_cast<CallData*>(tag)->SendReply(s,len);
+  }
+
  private:
   class CallData {
    public:
@@ -56,10 +64,21 @@ class ServerImpl final {
       Proceed();
     }
 
+    void SendReply(const char *s, size_t len) {
+      if (status_ == GETREPLY) {
+        reply_.set_message("Blehh");
+        responder_.Finish(reply_, Status::OK, this);
+        status_ = FINISH;
+        delete this;
+      } else {
+        std::cout << "Wrong state! " << status_ << std::endl;
+      }
+    }
+
     void Proceed() {
       if (status_ == CREATE) {
-        // Make this instance progress to the PROCESS state.
-        status_ = PROCESS;
+        // Make this instance progress to the SENDREQ state.
+        status_ = SENDREQ;
 
         // As part of the initial CREATE state, we *request* that the system
         // start processing SayHello requests. In this request, "this" acts are
@@ -68,21 +87,21 @@ class ServerImpl final {
         // the memory address of this CallData instance.
         service_->RequestSet(&ctx_, &request_, &responder_, cq_, cq_,
                                   this);
-      } else if (status_ == PROCESS) {
+      } else if (status_ == SENDREQ) {
         // Spawn a new CallData instance to serve new clients while we process
         // the one for this CallData. The instance will deallocate itself as
         // part of its FINISH state.
+        status_ = GETREPLY;
         new CallData(service_, cq_);
 
-        // The actual processing.
-        reply_.set_message("Bleh");
-
-        // And we are done! Let the gRPC runtime know we've finished, using the
-        // memory address of this instance as the uniquely identifying tag for
-        // the event.
-        status_ = FINISH;
-        responder_.Finish(reply_, Status::OK, this);
-      } else {
+        void *c = createClient(0);
+        settag(c, this, (void *)addReplyGrpcCallback);
+        const char *cmd = "PING\r\n";
+        uint32_t len = strlen(cmd)+1;
+        void *dst = querybuf(c,len);
+        memcpy(dst, cmd, len);
+        processInputBuffer(c);
+      } else if (status_ == FINISH) {
         assert(status_ == FINISH);
         // Once in the FINISH state, deallocate ourselves (CallData).
         delete this;
@@ -109,7 +128,7 @@ class ServerImpl final {
     ServerAsyncResponseWriter<Reply> responder_;
 
     // Let's implement a tiny state machine with the following states.
-    enum CallStatus { CREATE, PROCESS, FINISH };
+    enum CallStatus { CREATE, SENDREQ, GETREPLY, FINISH };
     CallStatus status_;  // The current serving state.
   };
 
@@ -142,13 +161,14 @@ class GRedisServiceImpl final : public GRedis::Service {
                   Reply* reply) override {
     void *c;
     if ((c = createClient(0)) == NULL) {
-      reply->set_message("Error");
+      reply->set_message("Error: Could not create client");
     } else {
       // ADD CODE TO DO SET COMMAND
       const char *cmd = "PING\r\n";
-      memcpy(querybuf(c), cmd, strlen(cmd)+1);
+      uint32_t len = strlen(cmd)+1;
+      void *dst = querybuf(c,len);
+      memcpy(dst, cmd, len);
       processInputBuffer(c);
-      int len;
       char *res = outbuf(c, &len);
       printf("res = %s\n", res);
       reply->set_message(res);
@@ -157,26 +177,14 @@ class GRedisServiceImpl final : public GRedis::Service {
   }
 };
 
-void RunServer() {
-  std::string server_address("0.0.0.0:50051");
-  GRedisServiceImpl service;
+ServerImpl g_server;
 
-  ServerBuilder builder;
-  builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-  builder.RegisterService(&service);
-  std::unique_ptr<Server> server(builder.BuildAndStart());
-  std::cout << "Server listening on " << server_address << std::endl;
-  server->Wait();
+void addReplyGrpcCallback(void *tag, const char *s, size_t len) {
+  g_server.addReplyGrpc(tag, s, len);
 }
 
 int main(int argc, char** argv) {
   grpc_main(argc, argv);
-#if SYNC_GRPC
-  RunServer();
-#else
-  ServerImpl server;
-  server.Run();
-#endif
-
+  g_server.Run();
   return 0;
 }

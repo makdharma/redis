@@ -3617,10 +3617,23 @@ int redisIsSupervised(int mode) {
 }
 
 #ifdef GRPC_SERVER
-void *querybuf(client *c) { return c->querybuf; }
-char *outbuf(client *c, int *len) {*len = c->bufpos; return c->buf;}
+void *querybuf(client *c, uint32_t len) {
+  sds s = c->querybuf;
+  struct sdshdr8 *hdr = SDS_HDR(8,s);
+  hdr->flags = SDS_TYPE_8;
+  hdr->len = len;
+  return c->querybuf;
+}
+char *outbuf(client *c, uint32_t *len) {*len = c->bufpos; return c->buf;}
+void settag(client *c, void *tag, void *callback) {
+  c->tag = tag;
+  c->grpc_reply_callback = callback;
+}
 int grpc_main(int argc, char **argv) {
 #else
+int addReplyGrpc(void *tag, const char *s, size_t len) {
+  return 0;
+}
 int main(int argc, char **argv) {
 #endif
     struct timeval tv;
@@ -3653,7 +3666,6 @@ int main(int argc, char **argv) {
 #endif
 
     /* We need to initialize our libraries, and the server configuration. */
-    printf("argc=%d\n", argc);
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
@@ -3811,7 +3823,7 @@ int main(int argc, char **argv) {
     }
 
 #ifdef GRPC_SERVER
-    printf("Done Init");
+    printf("Done Init\n");
 #else
     aeSetBeforeSleepProc(server.el,beforeSleep);
     aeMain(server.el);

@@ -67,3 +67,11 @@ new_local_repository(
     path = "third_party/cares",
     build_file = "third_party/cares/cares.BUILD",
 )
+bind(
+    name = "gflags",
+    actual = "@com_github_gflags_gflags//:gflags",
+)
+local_repository(
+    name = "com_github_gflags_gflags",
+    path = "third_party/gflags",
+)

@@ -711,6 +711,9 @@ typedef struct client {
     /* Response buffer */
     int bufpos;
     char buf[PROTO_REPLY_CHUNK_BYTES];
+    /* for grpc */
+    void *tag;
+    void (*grpc_reply_callback)(void *, const char *, size_t);
 } client;
 
 struct saveparam {
